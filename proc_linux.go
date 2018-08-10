@@ -17,3 +17,7 @@ func TerminateProc(pid uint32) {}
 func GetProcessID() uint32 {
 	return 0
 }
+
+func GetNameForProcess(procID uint32) (name string, ok bool) {
+	return "", false
+}

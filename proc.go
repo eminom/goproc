@@ -1,6 +1,6 @@
 package proc
 
-type procInfo struct {
+type ProcInfo struct {
 	Name string
 	Pid  uint32
 }

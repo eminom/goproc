@@ -19,6 +19,7 @@ var (
 	nCloseHandle         *syscall.Proc
 	nTerminateProcess    *syscall.Proc
 	nWaitForSingleObject *syscall.Proc
+	nGetCurrentProcessId *syscall.Proc
 )
 
 const (
@@ -63,6 +64,7 @@ func init() {
 	nCloseHandle = k32.MustFindProc("CloseHandle")
 	nTerminateProcess = k32.MustFindProc("TerminateProcess")
 	nWaitForSingleObject = k32.MustFindProc("WaitForSingleObject")
+	nGetCurrentProcessId = k32.MustFindProc("GetCurrentProcessId")
 }
 
 func doCall(elFunc *syscall.Proc, v ...uintptr) (retval uintptr, ok bool, sysErr syscall.Errno) {
@@ -96,7 +98,7 @@ func FindProcessesByName(name string) []uint32 {
 	return rv
 }
 
-func EnumProcess() []procInfo {
+func EnumProcess() []ProcInfo {
 
 	var aUint32 uint32
 	var aUint16 uint16
@@ -128,7 +130,7 @@ func EnumProcess() []procInfo {
 	}
 	procIDs := *(*[]uint32)(unsafe.Pointer(&hdr))
 
-	var procs []procInfo
+	var procs []ProcInfo
 	for _, procID := range procIDs {
 
 		// System idle process shall be skipped
@@ -170,7 +172,7 @@ func EnumProcess() []procInfo {
 			continue
 		}
 
-		procs = append(procs, procInfo{
+		procs = append(procs, ProcInfo{
 			Name: syscall.UTF16ToString(nameBuff),
 			Pid:  procID,
 		})
@@ -206,4 +208,9 @@ func TerminateProc(pid uint32) {
 	if uintptr(WAIT_OBJECT_0) != r1 {
 		log.Printf("WaitForSingleObject: %x", r1)
 	}
+}
+
+func GetProcessID() uint32 {
+	r1, _, _ := doCall(nGetCurrentProcessId)
+	return uint32(r1)
 }

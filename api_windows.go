@@ -46,6 +46,7 @@ var (
 	nWaitForSingleObject *syscall.Proc
 	nGetCurrentProcessId *syscall.Proc
 	nGetExtendedTcpTable *syscall.Proc
+	nGetExtendedUdpTable *syscall.Proc
 )
 
 func init() {
@@ -63,6 +64,7 @@ func init() {
 	nGetCurrentProcessId = k32.MustFindProc("GetCurrentProcessId")
 
 	nGetExtendedTcpTable = iphlp.MustFindProc("GetExtendedTcpTable")
+	nGetExtendedUdpTable = iphlp.MustFindProc("GetExtendedUdpTable")
 }
 
 func doCall(elFunc *syscall.Proc, v ...uintptr) (retval uintptr, ok bool, sysErr syscall.Errno) {

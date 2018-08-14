@@ -2,7 +2,6 @@ package proc
 
 import (
 	"log"
-	"reflect"
 	"syscall"
 	"unsafe"
 )
@@ -44,6 +43,22 @@ const (
 	TCP_TABLE_OWNER_MODULE_ALL
 )
 
+type UdpTableClass uintptr
+
+/*
+typedef enum _UDP_TABLE_CLASS {
+  UDP_TABLE_BASIC         ,
+  UDP_TABLE_OWNER_PID     ,
+  UDP_TABLE_OWNER_MODULE
+} UDP_TABLE_CLASS, *PUDP_TABLE_CLASS;
+*/
+
+const (
+	UDP_TABLE_BASIC UdpTableClass = iota
+	UDP_TABLE_OWNER_PID
+	UDP_TABLE_OWNER_MODULE
+)
+
 /*
 typedef struct _MIB_TCPROW_OWNER_PID {
   DWORD dwState;
@@ -76,7 +91,42 @@ type MIB_TCPTABLE_OWNER_PID struct {
 	entries    byte
 }
 
+/*
+typedef struct _MIB_UDPROW_OWNER_PID {
+  DWORD dwLocalAddr;
+  DWORD dwLocalPort;
+  DWORD dwOwningPid;
+} MIB_UDPROW_OWNER_PID, *PMIB_UDPROW_OWNER_PID;
+*/
+
+type MIB_UDPROW_OWNER_PID struct {
+	localAddr uint32
+	localPort uint32
+	owningPid uint32
+}
+
+/*
+typedef struct _MIB_UDPTABLE_OWNER_PID {
+  DWORD                dwNumEntries;
+  MIB_UDPROW_OWNER_PID table[ANY_SIZE];
+} MIB_UDPTABLE_OWNER_PID, *PMIB_UDPTABLE_OWNER_PID;
+*/
+
+type MIB_UDPTABLE_OWNER_PID struct {
+	numEntries uint32
+	// nothing.
+}
+
 //private const int AF_INET = 2;
+
+const (
+	AF_INET = 2
+)
+
+const (
+	FALSE = 0
+	TRUE  = 1
+)
 
 func EnumerateTcpPorts() []NetPortInfo {
 	return EnumTcpPorts(NONE)
@@ -92,8 +142,9 @@ func EnumTcpPorts(portState uint32) (rv []NetPortInfo) {
 		uintptr(0),
 		uintptr(unsafe.Pointer(&bufSize)),
 		uintptr(1),
-		uintptr(2), //AF_INET
+		uintptr(AF_INET),
 		uintptr(TCP_TABLE_OWNER_PID_ALL),
+		uintptr(0), //Reserved
 	)
 	if !ok {
 		log.Printf("GetExtendedTcpTable failed: %v", err)
@@ -106,8 +157,9 @@ func EnumTcpPorts(portState uint32) (rv []NetPortInfo) {
 		uintptr(unsafe.Pointer(&buffer[0])),
 		uintptr(unsafe.Pointer(&bufSize)),
 		uintptr(1), //true
-		uintptr(2), //AF_INET
+		uintptr(AF_INET),
 		uintptr(TCP_TABLE_OWNER_PID_ALL),
+		uintptr(0), //Reserved
 	)
 	if !ok || r1 != 0 {
 		log.Printf("GetExtendedTcpTable failed: %v", err)
@@ -116,28 +168,77 @@ func EnumTcpPorts(portState uint32) (rv []NetPortInfo) {
 
 	table := (*MIB_TCPTABLE_OWNER_PID)(unsafe.Pointer(&buffer[0]))
 	entCount := int(table.numEntries)
-	hdr := reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&table.entries)),
-		Len:  entCount,
-		Cap:  entCount,
+
+	// hdr := reflect.SliceHeader{
+	// 	Data: uintptr(unsafe.Pointer(&table.entries)),
+	// 	Len:  entCount,
+	// 	Cap:  entCount,
+	// }
+	// rows := *(*[]MIB_TCPROW_OWNER_PID)(unsafe.Pointer(&hdr))
+	var bp = uintptr(unsafe.Pointer(table)) + unsafe.Sizeof(table.numEntries)
+	for i := 0; i < entCount; i++ {
+		row := *(*MIB_TCPROW_OWNER_PID)(unsafe.Pointer(bp))
+		if portState == NONE || row.state == portState {
+			if name, ok := GetNameForProcess(row.owningPid); ok && name != "" {
+				ni := NetPortInfo{
+					Name:       name,
+					LocalIP:    translateIP(row.localAddr),
+					LocalPort:  fetchBigEndianUint16(row.localPort),
+					RemoteIP:   translateIP(row.remoteAddr),
+					RemotePort: fetchBigEndianUint16(row.remotePort),
+					Pid:        row.owningPid,
+				}
+				rv = append(rv, ni)
+			}
+		}
+		bp += unsafe.Sizeof(row)
+	}
+	return
+}
+
+func EnumUdpPorts() (rv []UDPPortInfo) {
+	var cbSize uint32
+	_, ok, _ := doCall(nGetExtendedUdpTable,
+		0,
+		uintptr(unsafe.Pointer(&cbSize)),
+		1, //sort for me
+		uintptr(AF_INET),
+		uintptr(UDP_TABLE_OWNER_PID),
+		uintptr(0), //reserved, and must be 0
+	)
+	if !ok {
+		log.Printf("GetExtendedUdpTable failed")
+		return
+	}
+	buff := make([]byte, cbSize)
+	r1, ok, _ := doCall(nGetExtendedUdpTable,
+		uintptr(unsafe.Pointer(&buff[0])),
+		uintptr(unsafe.Pointer(&cbSize)),
+		1,
+		uintptr(AF_INET),
+		uintptr(UDP_TABLE_OWNER_PID),
+		uintptr(0), //reserved, and must be 0
+	)
+	if !ok || r1 != 0 {
+		log.Printf("GetExtededUdpTable failed")
+		return
 	}
 
-	rows := *(*[]MIB_TCPROW_OWNER_PID)(unsafe.Pointer(&hdr))
-	for _, row := range rows {
-		if portState != NONE && row.state != portState {
-			continue
-		}
-		if name, ok := GetNameForProcess(row.owningPid); ok && name != "" {
-			ni := NetPortInfo{
-				Name:       name,
-				LocalIP:    translateIP(row.localAddr),
-				LocalPort:  fetchBigEndianUint16(row.localPort),
-				RemoteIP:   translateIP(row.remoteAddr),
-				RemotePort: fetchBigEndianUint16(row.remotePort),
-				Pid:        row.owningPid,
+	table := (*MIB_UDPTABLE_OWNER_PID)(unsafe.Pointer(&buff[0]))
+	entCount := int(table.numEntries)
+	var bp = uintptr(unsafe.Pointer(table)) + unsafe.Sizeof(table.numEntries)
+	for i := 0; i < entCount; i++ {
+		var row = *(*MIB_UDPROW_OWNER_PID)(unsafe.Pointer(bp))
+		if name, ok := GetNameForProcess(row.owningPid); ok {
+			ui := UDPPortInfo{
+				Name:      name,
+				Pid:       row.owningPid,
+				LocalIP:   translateIP(row.localAddr),
+				LocalPort: fetchBigEndianUint16(row.localPort),
 			}
-			rv = append(rv, ni)
+			rv = append(rv, ui)
 		}
+		bp += unsafe.Sizeof(row)
 	}
 	return
 }

@@ -14,6 +14,13 @@ type NetPortInfo struct {
 	RemotePort uint16
 }
 
+type UDPPortInfo struct {
+	Name      string
+	Pid       uint32
+	LocalIP   net.IP
+	LocalPort uint16
+}
+
 func fetchBigEndianUint16(v uint32) uint16 {
 	var b [2]byte
 	binary.BigEndian.PutUint16(b[:], uint16(v))

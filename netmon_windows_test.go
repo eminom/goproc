@@ -9,3 +9,9 @@ func TestEnumPorts(t *testing.T) {
 		t.Logf("%v: <%v:%v>  - <%v:%v>", v.Name, v.LocalIP, v.LocalPort, v.RemoteIP, v.RemotePort)
 	}
 }
+
+func TestEnumUdpPorts(t *testing.T) {
+	for _, v := range EnumUdpPorts() {
+		t.Logf("%v: <%v:%v>", v.Name, v.LocalIP, v.LocalPort)
+	}
+}

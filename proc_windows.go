@@ -2,10 +2,15 @@ package proc
 
 import (
 	"log"
+	"os"
 	"reflect"
 	"strings"
 	"syscall"
 	"unsafe"
+)
+
+import (
+	_ "runtime/cgo"
 )
 
 //https://docs.microsoft.com/en-us/windows/desktop/api/psapi/nf-psapi-enumprocesses
@@ -150,4 +155,20 @@ func TerminateProc(pid uint32) {
 func GetProcessID() uint32 {
 	r1, _, _ := doCall(nGetCurrentProcessId)
 	return uint32(r1)
+}
+
+func EnterConsole(sigCh chan<- os.Signal) {
+	var pID int32 = -1
+	// Attach to parent process's console
+	nAttachConsole.Call(uintptr(pID))
+	ptr := syscall.NewCallback(func(evt uint32) uintptr {
+		switch evt {
+		case 0: //Ctrl+C
+			sigCh <- os.Interrupt
+			return 1 // marked as "handled"
+		}
+		return 0
+	})
+	// Add to handler chain
+	nSetConsoleCtrlHandler.Call(uintptr(syscall.Handle(ptr)), 1)
 }

@@ -1,5 +1,9 @@
 package proc
 
+import (
+	"os"
+)
+
 func EnumProcess() []ProcInfo {
 	return nil
 }
@@ -20,4 +24,8 @@ func GetProcessID() uint32 {
 
 func GetNameForProcess(procID uint32) (name string, ok bool) {
 	return "", false
+}
+
+func EnterConsole(sigCh chan<- os.Signal) {
+	//NOTHING FOR LINUX
 }

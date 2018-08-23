@@ -47,6 +47,9 @@ var (
 	nGetCurrentProcessId *syscall.Proc
 	nGetExtendedTcpTable *syscall.Proc
 	nGetExtendedUdpTable *syscall.Proc
+
+	nAttachConsole         *syscall.Proc
+	nSetConsoleCtrlHandler *syscall.Proc
 )
 
 func init() {
@@ -65,6 +68,9 @@ func init() {
 
 	nGetExtendedTcpTable = iphlp.MustFindProc("GetExtendedTcpTable")
 	nGetExtendedUdpTable = iphlp.MustFindProc("GetExtendedUdpTable")
+
+	nAttachConsole = k32.MustFindProc("AttachConsole")
+	nSetConsoleCtrlHandler = k32.MustFindProc("SetConsoleCtrlHandler")
 }
 
 func doCall(elFunc *syscall.Proc, v ...uintptr) (retval uintptr, ok bool, sysErr syscall.Errno) {
